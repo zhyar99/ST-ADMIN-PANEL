@@ -204,6 +204,49 @@ point-in-time restore covers the database.
 
 ---
 
+## Moving an existing database and its media
+
+Neon holds the rows; the volume holds the files. They move separately, and the
+rows are useless without the files — a `media_asset` row whose file is missing
+renders as a broken image, it does not fail loudly.
+
+**Rows.** Dump data only, and skip `admin_refresh_token`: those are hashed
+sessions bound to the old `JWT_SECRET`, so they are dead on arrival anywhere else.
+
+```bash
+pg_dump "$LOCAL_URL" --data-only --schema=public \
+  --exclude-table=public.admin_refresh_token \
+  --no-owner --no-privileges -f data.sql
+```
+
+Load it over Neon's **direct** endpoint, in one transaction, so a failure
+half-way leaves the database exactly as it was:
+
+```bash
+psql "$NEON_DIRECT_URL" -v ON_ERROR_STOP=1 --single-transaction -f data.sql
+```
+
+`pg_dump` orders the `COPY` blocks by foreign-key dependency, so no constraint
+juggling is needed. Take a `pg_dump` of the target first if it is not empty.
+
+**Files.** `tar` the storage tree and unpack it into the volume:
+
+```bash
+COPYFILE_DISABLE=1 tar --no-xattrs --exclude='.gitkeep' --exclude='._*' \
+  -czf storage-media.tar.gz -C apps/server/storage .
+```
+
+`COPYFILE_DISABLE` and the two excludes matter on macOS: without them `tar`
+ships an AppleDouble `._name` sibling for every file, and they land on the
+volume as junk.
+
+Then, from the Koyeb console shell for the running instance, fetch and unpack it
+into `/data/storage`. Migrated accounts keep working — password hashes travel
+with the rows — but the passwords themselves are whatever they were in
+development, so rotate them once you are in.
+
+---
+
 ## Routine operations
 
 **A schema change**
