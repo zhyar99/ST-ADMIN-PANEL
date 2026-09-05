@@ -1,0 +1,44 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build output
+dist/
+apps/server/public/admin/
+*.tsbuildinfo
+
+# local env
+.env
+.env.*
+!.env.example
+*.local
+
+# uploaded media (keep the folder structure, ignore the contents)
+#
+# Spelled as three rules rather than a plain `apps/server/storage/`: git will
+# not descend into an excluded directory, so a blanket ignore would also drop
+# the .gitkeep files, and a fresh clone would then have no posters/ or
+# subtitles/ for multer — and no directories for /ready to prove writable.
+apps/server/storage/*
+!apps/server/storage/*/
+apps/server/storage/*/*
+!apps/server/storage/*/.gitkeep
+
+# drizzle
+apps/server/drizzle/*.snap
+
+# local tooling config — .claude/settings.local.json holds machine-local
+# credentials in its allowed-command list
+.claude/
+.vscode/
+.idea/
+
+# the local build guide: a scaffolding prompt document, not part of the app,
+# and it embeds local dev secrets
+streaming_guide_local_v5.md
+
+# misc
+backups/
+.DS_Store
+*.log
+coverage/

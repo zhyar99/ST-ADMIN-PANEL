@@ -1,0 +1,37 @@
+# Everything the build stage does not read, plus everything it would rather
+# rebuild than inherit from a developer's machine.
+
+.git
+.gitignore
+.github
+
+node_modules
+**/node_modules
+.pnpm-store
+
+# Build output — the image builds its own.
+dist
+**/dist
+apps/server/public/admin
+*.tsbuildinfo
+
+# Secrets and local-only config. The image gets its configuration from the
+# platform's environment, never from a baked-in file.
+.env
+.env.*
+!.env.example
+*.local
+.claude
+.vscode
+.idea
+
+# Uploaded media and database dumps: instance state, not build input.
+apps/server/storage
+backups
+
+# Docs and scratch files.
+*.md
+!README.md
+coverage
+*.log
+.DS_Store

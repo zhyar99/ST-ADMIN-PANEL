@@ -1,0 +1,90 @@
+# Koyeb service definition.
+#
+# The dashboard is the quickest path for a first deploy (see DEPLOYMENT.md);
+# this file is the same service expressed declaratively, for the CLI:
+#
+#   koyeb service update admin/web --file koyeb.yaml
+#
+# Secrets are referenced, never written here. Create them first:
+#
+#   koyeb secret create database-url --value 'postgresql://…'
+#   koyeb secret create migration-database-url --value 'postgresql://…'
+#   koyeb secret create jwt-secret   --value "$(openssl rand -hex 32)"
+
+app: streaming-admin
+
+services:
+  - name: web
+    # Koyeb builds the repository's Dockerfile; nothing is pushed by hand.
+    git:
+      repository: github.com/zhyar99/ST-ADMIN-PANEL
+      branch: main
+      builder: docker
+      docker:
+        dockerfile: Dockerfile
+
+    instance_types:
+      # 512 MB. sharp decodes uploaded artwork in-process, so the smallest
+      # instance is not a comfortable fit for the upload path.
+      - type: small
+
+    regions:
+      # Pick the region closest to the Neon project — every request that touches
+      # the database pays this round trip.
+      - fra
+
+    scalings:
+      # Fixed at one instance because media is stored on a volume, and a Koyeb
+      # volume attaches to exactly one instance. Moving media to object storage
+      # is what unlocks horizontal scaling.
+      - min: 1
+        max: 1
+
+    ports:
+      - port: 8000
+        protocol: http
+
+    routes:
+      - port: 8000
+        path: /
+
+    health_checks:
+      # Liveness, not readiness: /health touches no dependency, so a database
+      # blip cannot get a healthy instance restarted in a loop.
+      - grace_period: 30
+        interval: 30
+        restart_limit: 3
+        timeout: 5
+        http:
+          port: 8000
+          path: /health
+
+    volumes:
+      # Uploaded posters, backdrops, logos and subtitles. Without this the
+      # container filesystem is wiped on every deploy and every restart.
+      - id: streaming-admin-media
+        path: /data
+
+    env:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "8000"
+      - key: TRUST_PROXY
+        value: "1"
+      - key: STORAGE_DIR
+        value: /data/storage
+      - key: STORAGE_URL_PREFIX
+        value: /storage
+      - key: DATABASE_SSL
+        value: require
+      - key: DATABASE_POOL_MAX
+        value: "10"
+      - key: DATABASE_URL
+        secret: database-url
+      # Neon's direct (non "-pooler") host: the pooled endpoint cannot hold the
+      # session advisory lock the migration runner takes on boot.
+      - key: MIGRATION_DATABASE_URL
+        secret: migration-database-url
+      - key: JWT_SECRET
+        secret: jwt-secret

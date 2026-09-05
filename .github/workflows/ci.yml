@@ -1,0 +1,76 @@
+name: CI
+
+# Runs on the pushes Koyeb deploys from, so a red build is visible before the
+# rollout rather than after it.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # The server's tests talk to a real Postgres rather than a mock, which is
+    # the only way the Drizzle queries and the migrations get exercised at all.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: streaming_backbone_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/streaming_backbone_test
+      DATABASE_SSL: disable
+      NODE_ENV: test
+      JWT_SECRET: ci-only-secret-not-used-anywhere-else-0123456789
+      STORAGE_DIR: ./storage
+      STORAGE_URL_PREFIX: /storage
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Also proves the committed migrations still apply cleanly to an empty
+      # database — the integration tests assume the schema is already there.
+      - run: pnpm db:migrate
+
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+
+  # Proves the artefact Koyeb will build still builds, before it tries.
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
