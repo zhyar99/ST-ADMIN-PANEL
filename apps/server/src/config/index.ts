@@ -114,6 +114,30 @@ function databaseUsesTls(url: string, mode: 'auto' | 'require' | 'disable'): boo
   }
 }
 
+/**
+ * Strips the TLS query parameters out of a connection string.
+ *
+ * `ssl` is passed to `pg` explicitly, from {@link databaseUsesTls}, so whatever
+ * the DSN says about TLS is dead configuration — and leaving it there is not
+ * free: `pg` emits a "SECURITY WARNING" about its `sslmode` aliasing on every
+ * process start, which in a deployment log is a false alarm on every boot.
+ * `channel_binding` goes too; it is a libpq parameter `pg` does not implement.
+ *
+ * Dropping them also removes the ambiguity of having TLS described in two
+ * places that could disagree.
+ */
+function stripTlsParams(url: string): string {
+  try {
+    const parsed = new URL(url);
+    parsed.searchParams.delete('sslmode');
+    parsed.searchParams.delete('channel_binding');
+    return parsed.toString();
+  } catch {
+    // Not a parseable URL (a unix socket DSN, say) — hand it back untouched.
+    return url;
+  }
+}
+
 /** Normalises TRUST_PROXY into the shape Express's `trust proxy` setting takes. */
 function trustProxySetting(value: number | 'true' | 'false'): number | boolean {
   if (value === 'true') return true;
@@ -125,8 +149,12 @@ export const config = {
   ...parsed.data,
   /** Whether the Postgres connection must be made over TLS. */
   databaseSsl: databaseUsesTls(parsed.data.DATABASE_URL, parsed.data.DATABASE_SSL),
+  /** DATABASE_URL as handed to `pg` — TLS comes from `databaseSsl` instead. */
+  databaseUrl: stripTlsParams(parsed.data.DATABASE_URL),
   /** Connection string the migrator should use, falling back to the app's. */
-  migrationDatabaseUrl: parsed.data.MIGRATION_DATABASE_URL || parsed.data.DATABASE_URL,
+  migrationDatabaseUrl: stripTlsParams(
+    parsed.data.MIGRATION_DATABASE_URL || parsed.data.DATABASE_URL,
+  ),
   /** Value handed to `app.set('trust proxy', …)`. */
   trustProxy: trustProxySetting(parsed.data.TRUST_PROXY),
   /** Absolute path to the local media storage root. */

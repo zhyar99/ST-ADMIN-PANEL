@@ -6,7 +6,7 @@ import { logger } from '../logger';
 import * as schema from './schema';
 
 export const pool = new Pool({
-  connectionString: config.DATABASE_URL,
+  connectionString: config.databaseUrl,
   max: config.DATABASE_POOL_MAX,
   /**
    * TLS is decided by config rather than left to the `sslmode` in the DSN, so a
