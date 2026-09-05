@@ -4,8 +4,9 @@ A pnpm monorepo for the streaming platform's Admin Panel and API. One Node proce
 serves the Admin SPA, the API, and uploaded media.
 
 Local development needs nothing but Node and Postgres. For hosting, the same
-process ships as a single container — see **[DEPLOYMENT.md](DEPLOYMENT.md)** for
-Koyeb + Neon.
+process ships as a single container: `render.yaml` describes the whole service,
+so pointing Render at this repository is the only step. See
+**[DEPLOYMENT.md](DEPLOYMENT.md)**.
 
 | Package             | What it is                                        |
 | ------------------- | ------------------------------------------------- |
@@ -119,6 +120,10 @@ docker run -p 8000:8000 \
 ```
 
 `GET /health` is liveness (no dependencies) and `GET /ready` is readiness (names
-the failing dependency). **[DEPLOYMENT.md](DEPLOYMENT.md)** covers Koyeb + Neon
-end to end, including the two Neon connection strings and why media needs a
-volume.
+the failing dependency).
+
+Hosting is described in the repository, not clicked together by hand:
+`render.yaml` (a Render Blueprint) and `koyeb.yaml` both build this Dockerfile
+and set the same environment. **[DEPLOYMENT.md](DEPLOYMENT.md)** covers it end to
+end — the two Neon connection strings, why media needs a disk, and how to move an
+existing database across.

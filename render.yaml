@@ -1,0 +1,95 @@
+# Render Blueprint.
+#
+# Point Render at this repository ("New → Blueprint") and it creates the whole
+# service from this file: the Docker build, the disk, the health check and every
+# environment variable. The only thing it asks for is the two Neon connection
+# strings, because those are the only values this file deliberately does not
+# carry.
+#
+# See DEPLOYMENT.md for the walkthrough.
+
+services:
+  - name: streaming-admin
+    type: web
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+
+    # Frankfurt, to sit next to a Neon project in eu-central-1. Every request
+    # that touches the database pays this round trip, so a mismatched pair adds
+    # roughly 100 ms to each one. Change both together or neither.
+    region: frankfurt
+
+    # The smallest paid instance. It has to be paid: Render does not attach
+    # disks to free services, and without a disk every uploaded poster is lost
+    # on the next deploy. `sharp` decodes artwork in-process, so if uploads of
+    # large images get killed, this is the line to raise.
+    plan: 0.5c-512mb
+
+    # A disk pins a service to one instance — Render refuses to scale a service
+    # that has one — so this is stated rather than left implicit.
+    numInstances: 1
+
+    autoDeployTrigger: commit
+
+    # Liveness, not readiness. /health touches no dependency, so a database blip
+    # cannot turn into a restart loop. Watch /ready from your own monitoring:
+    # it names which dependency is down.
+    healthCheckPath: /health
+
+    disk:
+      # Uploaded posters, backdrops, logos, ad creatives and subtitles.
+      # STORAGE_DIR below points inside this mount.
+      name: media
+      mountPath: /data
+      sizeGB: 1
+
+    envVars:
+      # --- The two values Render will prompt for -------------------------------
+      # Neon gives two connection strings and both are needed. The app uses the
+      # pooled one (host contains "-pooler"); migrations use the direct one,
+      # because the pooled endpoint is PgBouncer in transaction mode and cannot
+      # hold the session-scoped advisory lock the migration runner takes.
+      - key: DATABASE_URL
+        sync: false
+      - key: MIGRATION_DATABASE_URL
+        sync: false
+
+      # --- Generated once, by Render ------------------------------------------
+      # A random 256-bit value, which comfortably clears the 32-character
+      # minimum. Never appears in this file or in the repository. Changing it
+      # later signs everyone out, which is the correct behaviour.
+      - key: JWT_SECRET
+        generateValue: true
+
+      # --- Fixed configuration ------------------------------------------------
+      - key: NODE_ENV
+        value: production
+
+      # Set explicitly so the port is not left to Render's detection: the app
+      # binds whatever PORT says, and the Dockerfile's own default is the same.
+      - key: PORT
+        value: 8000
+
+      # Render terminates TLS and forwards through one proxy hop. Without this
+      # Express reports the proxy as req.ip and every rate limiter collapses
+      # into a single global bucket — one busy client would lock out everyone.
+      - key: TRUST_PROXY
+        value: 1
+
+      # Inside the disk mounted above.
+      - key: STORAGE_DIR
+        value: /data/storage
+
+      # Relative, so media is served from whatever hostname Render assigns
+      # without this file having to know it.
+      - key: STORAGE_URL_PREFIX
+        value: /storage
+
+      - key: DATABASE_SSL
+        value: require
+
+      # Neon's connection limit is per project, not per service. One instance
+      # holding ten is comfortable; lower it if something else shares the
+      # database.
+      - key: DATABASE_POOL_MAX
+        value: 10
