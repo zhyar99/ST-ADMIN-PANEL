@@ -4,6 +4,7 @@ import type {
   AdPolicyDTO,
   PlaybackContentType,
   PlaybackSessionResponse,
+  StreamSourceKind,
   StreamSourceOwnerType,
 } from '@streaming/shared' with { 'resolution-mode': 'import' };
 
@@ -94,9 +95,9 @@ async function requirePublished(
  * back — whereas returning nothing is a guaranteed black screen. Better to let
  * the player try and fail than to fail on its behalf.
  */
-function selectSource<T extends { url: string; lastTestResult: 'OK' | 'FAILED' | null }>(
-  sources: T[],
-): T | undefined {
+function selectSource<
+  T extends { url: string; kind: StreamSourceKind; lastTestResult: 'OK' | 'FAILED' | null },
+>(sources: T[]): T | undefined {
   return sources.find((source) => source.lastTestResult !== 'FAILED') ?? sources[0];
 }
 
@@ -161,7 +162,11 @@ export async function createPlaybackSession(
   await requirePublished(contentType, contentId);
 
   const sources = await db
-    .select({ url: streamSource.url, lastTestResult: streamSource.lastTestResult })
+    .select({
+      url: streamSource.url,
+      kind: streamSource.kind,
+      lastTestResult: streamSource.lastTestResult,
+    })
     .from(streamSource)
     .where(
       and(
@@ -183,7 +188,7 @@ export async function createPlaybackSession(
   // A live channel has neither subtitle tracks (the feed carries its own
   // captions if any) nor ad breaks, so both keys are absent rather than empty.
   if (contentType === 'live_channel') {
-    return { sourceUrl: selected.url };
+    return { sourceUrl: selected.url, sourceKind: selected.kind };
   }
 
   const [subtitleTracks, adPolicy] = await Promise.all([
@@ -191,5 +196,9 @@ export async function createPlaybackSession(
     loadAdPolicy(),
   ]);
 
-  return { sourceUrl: selected.url, subtitleTracks, adPolicy };
+  // `sourceKind` tells the player which of the two it has been handed: a media
+  // URL for its video element, or a third-party player page for an iframe.
+  // Nothing about it can be derived from the URL, and the URL is the one thing
+  // the player must not have to parse.
+  return { sourceUrl: selected.url, sourceKind: selected.kind, subtitleTracks, adPolicy };
 }

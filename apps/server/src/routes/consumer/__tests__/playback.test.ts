@@ -265,6 +265,40 @@ describe('response shape', () => {
     ]);
   });
 
+  it('reports the kind of the source it hands back', async (ctx) => {
+    requireDb(ctx);
+
+    const EMBED_URL = 'https://play.example.test/e/movie/1204680?autostart=true';
+
+    // Two sources, the embed first. What the player is given is a page to
+    // frame, and the response has to say so — the URL alone cannot be parsed
+    // into that answer, which is the whole reason the column exists.
+    const embedMovieId = await createMovie({ sources: [EMBED_URL, BACKUP_URL] });
+
+    await db
+      .update(streamSource)
+      .set({ kind: 'EMBED' })
+      .where(and(eq(streamSource.ownerId, embedMovieId), eq(streamSource.url, EMBED_URL)));
+
+    const body = (await (
+      await session({ contentType: 'movie', contentId: embedMovieId })
+    ).json()) as PlaybackSessionResponse;
+
+    expect(body.sourceUrl).toBe(EMBED_URL);
+    expect(body.sourceKind).toBe('EMBED');
+
+    // Failing the embed over falls back to the direct file, and the kind
+    // follows the source rather than the movie.
+    await markFailed(embedMovieId, EMBED_URL);
+
+    const afterFailover = (await (
+      await session({ contentType: 'movie', contentId: embedMovieId })
+    ).json()) as PlaybackSessionResponse;
+
+    expect(afterFailover.sourceUrl).toBe(BACKUP_URL);
+    expect(afterFailover.sourceKind).toBe('DIRECT');
+  });
+
   it('omits adPolicy and subtitleTracks entirely for a live channel', async (ctx) => {
     requireDb(ctx);
 
@@ -274,7 +308,10 @@ describe('response shape', () => {
     const body = (await response.json()) as PlaybackSessionResponse;
 
     expect(body.sourceUrl).toBe('https://stream.example.test/channel.m3u8');
-    expect(Object.keys(body)).toEqual(['sourceUrl']);
+    // `sourceKind` rides along for every content type, a channel included: the
+    // player has to know whether it was handed a manifest or a page to frame
+    // before it knows anything else about the session.
+    expect(Object.keys(body)).toEqual(['sourceUrl', 'sourceKind']);
     expect('adPolicy' in body).toBe(false);
     expect('subtitleTracks' in body).toBe(false);
   });

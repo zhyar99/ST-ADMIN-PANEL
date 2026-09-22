@@ -25,7 +25,7 @@ export default function StreamSourcesSection({ movieId }: { movieId: string }) {
   const sourceApi = useMemo<StreamSourceApi>(
     () => ({
       list: () => listSources(movieId),
-      add: (url) => addSource(movieId, { url }),
+      add: (input) => addSource(movieId, input),
       remove: (sourceId) => deleteSource(movieId, sourceId),
       reorder: (orderedIds) => reorderSources(movieId, orderedIds),
       test: (sourceId) => testSource(movieId, sourceId),
@@ -34,5 +34,13 @@ export default function StreamSourcesSection({ movieId }: { movieId: string }) {
     [movieId],
   );
 
-  return <StreamSourceManager queryKey={['admin', 'movies', movieId, 'sources']} api={sourceApi} />;
+  // Films may be served either as a media file or through a third-party player
+  // page, so the kind picker is offered here.
+  return (
+    <StreamSourceManager
+      queryKey={['admin', 'movies', movieId, 'sources']}
+      api={sourceApi}
+      allowEmbed
+    />
+  );
 }

@@ -30,6 +30,22 @@ export const STREAM_SOURCE_OWNER_TYPES = ['MOVIE', 'EPISODE', 'LIVE_CHANNEL'] as
 
 export type StreamSourceOwnerType = (typeof STREAM_SOURCE_OWNER_TYPES)[number];
 
+/**
+ * How a stream source's URL is meant to be played. Mirrors `stream_source_kind`.
+ *
+ * `DIRECT` is a media URL the player hands to a video element — an .mp4 file or
+ * an HLS manifest. `EMBED` is a third-party player page (`https://play.example/
+ * e/movie/1204680?autostart=true`), which serves HTML and therefore has to be
+ * loaded in an iframe or a webview.
+ *
+ * Stored rather than inferred: an embed page usually has no file extension and
+ * a manifest often carries a query string, so the URL alone does not say which
+ * kind it is. Only the operator adding it knows.
+ */
+export const STREAM_SOURCE_KINDS = ['DIRECT', 'EMBED'] as const;
+
+export type StreamSourceKind = (typeof STREAM_SOURCE_KINDS)[number];
+
 /** Outcome of a manual stream playability check. Mirrors `stream_test_result`. */
 export const STREAM_TEST_RESULTS = ['OK', 'FAILED'] as const;
 

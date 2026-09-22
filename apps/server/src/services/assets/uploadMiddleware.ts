@@ -9,7 +9,13 @@ import { config } from '../../config';
 import { parseOrThrow } from '../../lib/validate';
 import { HttpError } from '../../middleware/errorHandler';
 import { uploadKindParam } from '../../schemas/assetSchemas';
-import { ASSET_POLICY, extensionFor, kindFromSlug, type AssetKind } from './policy';
+import {
+  ASSET_POLICY,
+  extensionFor,
+  isUploadTypeAllowed,
+  kindFromSlug,
+  type AssetKind,
+} from './policy';
 
 /** Field name the client must use in the multipart body. */
 export const UPLOAD_FIELD = 'file';
@@ -53,7 +59,7 @@ function buildUploader(kind: AssetKind): RequestHandler {
     fileFilter(_req, file, cb) {
       // multer calls this before opening the write stream, so a rejected type
       // never leaves a file behind.
-      if (file.mimetype in policy.extensionByMime) {
+      if (isUploadTypeAllowed(kind, file.mimetype, file.originalname)) {
         cb(null, true);
         return;
       }

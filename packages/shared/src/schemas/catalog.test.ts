@@ -7,7 +7,9 @@ import {
   MovieUpdateInput,
   RemoteUrl,
   RequiredLocalizedText,
+  StreamSourceCreateInput,
   StreamSourceReorderInput,
+  StreamSourceUpdateInput,
   SubtitleTrackCreateInput,
 } from './catalog.js';
 
@@ -249,6 +251,59 @@ describe('LiveChannelUpdateInput', () => {
     expect(
       LiveChannelUpdateInput.safeParse({ name_i18n: { en: 'A', ckb: 'B' } }).success,
     ).toBe(false);
+  });
+});
+
+describe('StreamSourceCreateInput', () => {
+  /** A third-party player page: serves HTML, must be framed, is not a file. */
+  const EMBED_URL = 'https://play.example.test/e/movie/1204680?autostart=true';
+
+  it('accepts an embed page alongside a media file', () => {
+    expect(StreamSourceCreateInput.parse({ url: EMBED_URL, kind: 'EMBED' })).toMatchObject({
+      url: EMBED_URL,
+      kind: 'EMBED',
+    });
+  });
+
+  // The two kinds are indistinguishable as URLs — no extension on one, query
+  // strings on both — so neither may be inferred and neither may be refused.
+  it('accepts an extensionless url for either kind', () => {
+    expect(StreamSourceCreateInput.safeParse({ url: EMBED_URL, kind: 'DIRECT' }).success).toBe(
+      true,
+    );
+    expect(
+      StreamSourceCreateInput.safeParse({
+        url: 'https://cdn.example.com/master.m3u8',
+        kind: 'EMBED',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('leaves the kind to the server default when it is omitted', () => {
+    const parsed = StreamSourceCreateInput.parse({ url: EMBED_URL });
+    expect(parsed.kind).toBeUndefined();
+  });
+
+  it('rejects a kind outside the enum', () => {
+    expect(StreamSourceCreateInput.safeParse({ url: EMBED_URL, kind: 'IFRAME' }).success).toBe(
+      false,
+    );
+  });
+
+  it('still rejects a non-http url whatever the kind', () => {
+    expect(
+      StreamSourceCreateInput.safeParse({ url: 'file:///etc/passwd', kind: 'EMBED' }).success,
+    ).toBe(false);
+  });
+});
+
+describe('StreamSourceUpdateInput', () => {
+  it('accepts a kind-only change', () => {
+    expect(StreamSourceUpdateInput.safeParse({ kind: 'EMBED' }).success).toBe(true);
+  });
+
+  it('still rejects an empty body', () => {
+    expect(StreamSourceUpdateInput.safeParse({}).success).toBe(false);
   });
 });
 

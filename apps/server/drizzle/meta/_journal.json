@@ -78,6 +78,13 @@
       "when": 1788509627993,
       "tag": "0010_heavy_stick",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1789485422728,
+      "tag": "0011_ancient_mach_iv",
+      "breakpoints": true
     }
   ]
 }

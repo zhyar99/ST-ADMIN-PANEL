@@ -43,6 +43,7 @@ export function toStreamSourceDto(row: StreamSource): StreamSourceDto {
   return {
     id: row.id,
     priority: row.priority,
+    kind: row.kind,
     lastTestedAt: row.lastTestedAt?.toISOString() ?? null,
     lastTestResult: row.lastTestResult,
     createdAt: row.createdAt.toISOString(),
@@ -96,6 +97,9 @@ export async function addSource(
       ownerType: owner.ownerType,
       ownerId: owner.ownerId,
       url: input.url,
+      // Absent means DIRECT, which is the column default — spelled out here
+      // only so the insert reads the same as the update below.
+      ...(input.kind !== undefined && { kind: input.kind }),
       priority,
     })
     .returning();
@@ -116,8 +120,12 @@ export async function updateSource(
     .update(streamSource)
     .set({
       ...(input.url !== undefined && { url: input.url }),
+      ...(input.kind !== undefined && { kind: input.kind }),
       ...(input.priority !== undefined && { priority: input.priority }),
-      // Editing the URL invalidates the previous health result.
+      // Editing the URL invalidates the previous health result. Changing only
+      // the kind does not: the same URL answered the same way either way, and
+      // discarding a good result would make the badge lie about a working
+      // source until someone clicked Test again.
       ...(input.url !== undefined && { lastTestedAt: null, lastTestResult: null }),
       updatedAt: new Date(),
     })

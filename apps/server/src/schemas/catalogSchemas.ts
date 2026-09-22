@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { publicationStatus, subtitleLanguage } from '../db/schema';
+import { publicationStatus, streamSourceKind, subtitleLanguage } from '../db/schema';
 
 /**
  * Zod shapes for every untrusted input the catalogue routes accept.
@@ -20,6 +20,7 @@ import { publicationStatus, subtitleLanguage } from '../db/schema';
 /** Enum values come from the Drizzle schema so they cannot drift from the DB. */
 const statusValues = publicationStatus.enumValues;
 const languageValues = subtitleLanguage.enumValues;
+const sourceKindValues = streamSourceKind.enumValues;
 
 /**
  * Copy that must actually say something in all three languages, with no extra
@@ -205,14 +206,27 @@ export const streamSourceIdParam = z.object({
   sourceId: z.string().uuid('Not a valid stream source id'),
 });
 
+/**
+ * How the URL is meant to be played — a media file (DIRECT) or a third-party
+ * player page that has to be framed (EMBED).
+ *
+ * Optional, and the column defaults to DIRECT: a body written before embeds
+ * existed still means what it meant. No URL-shape check rides along with it,
+ * because there is none to make — an embed page and a manifest are both just
+ * https URLs, and guessing from the path would only override the operator.
+ */
+const sourceKind = z.enum(sourceKindValues);
+
 export const streamSourceCreateBody = z.object({
   url: remoteUrl,
+  kind: sourceKind.optional(),
   priority: z.coerce.number().int().min(0).max(100).optional(),
 });
 
 export const streamSourceUpdateBody = z
   .object({
     url: remoteUrl.optional(),
+    kind: sourceKind.optional(),
     priority: z.coerce.number().int().min(0).max(100).optional(),
   })
   .refine((value) => Object.keys(value).length > 0, { message: 'No fields to update' });

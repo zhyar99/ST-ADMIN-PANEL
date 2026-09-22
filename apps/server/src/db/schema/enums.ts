@@ -26,3 +26,14 @@ export const subtitleLanguage = pgEnum('subtitle_language', ['en', 'ar', 'ckb'])
 
 /** Outcome of a manual stream playability check (Phase 5). */
 export const streamTestResult = pgEnum('stream_test_result', ['OK', 'FAILED']);
+
+/**
+ * How a `stream_source.url` is meant to be played.
+ *
+ * `DIRECT` is a media URL the player hands to a video element (an .mp4 file, an
+ * HLS manifest). `EMBED` is a third-party player *page* — the URL renders HTML
+ * and has to go into an iframe or a webview, so feeding it to a video element
+ * yields nothing. The distinction cannot be inferred from the URL: plenty of
+ * embed pages have no extension and plenty of manifests have a query string.
+ */
+export const streamSourceKind = pgEnum('stream_source_kind', ['DIRECT', 'EMBED']);

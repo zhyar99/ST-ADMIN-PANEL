@@ -4,6 +4,7 @@ import type {
   ImportMappedType,
   MediaAssetKind,
   PublicationStatus,
+  StreamSourceKind,
   StreamSourceOwnerType,
   StreamTestResult,
   SubtitleLanguage,
@@ -54,6 +55,12 @@ export interface GenreListItemDto extends GenreDto {
 export interface StreamSourceDto {
   id: string;
   priority: number;
+  /**
+   * Whether the URL is a media file or a third-party player page. Safe to
+   * expose where the URL is not: it says how to play the source, not where it
+   * lives, and the admin list needs it to label each row.
+   */
+  kind: StreamSourceKind;
   lastTestedAt: string | null;
   lastTestResult: StreamTestResult | null;
   createdAt: string;

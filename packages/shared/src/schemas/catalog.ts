@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { PUBLICATION_STATUSES, SUBTITLE_LANGUAGES } from '../enums.js';
+import { PUBLICATION_STATUSES, STREAM_SOURCE_KINDS, SUBTITLE_LANGUAGES } from '../enums.js';
 import { LocalizedText } from './i18n.js';
 
 /**
@@ -189,8 +189,17 @@ export const LiveChannelUpdateInput = LiveChannelCreateInput.partial().refine(
 
 export type LiveChannelUpdateInput = z.infer<typeof LiveChannelUpdateInput>;
 
+/**
+ * How the URL is to be played.
+ *
+ * Optional on create and defaulted to DIRECT, so every caller written before
+ * embeds existed keeps working and keeps meaning what it meant.
+ */
+export const StreamSourceKindSchema = z.enum(STREAM_SOURCE_KINDS);
+
 export const StreamSourceCreateInput = z.object({
   url: RemoteUrl,
+  kind: StreamSourceKindSchema.optional(),
   priority: z.coerce.number().int().min(0).max(100).optional(),
 });
 
@@ -199,6 +208,7 @@ export type StreamSourceCreateInput = z.infer<typeof StreamSourceCreateInput>;
 export const StreamSourceUpdateInput = z
   .object({
     url: RemoteUrl.optional(),
+    kind: StreamSourceKindSchema.optional(),
     priority: z.coerce.number().int().min(0).max(100).optional(),
   })
   .refine((value) => Object.keys(value).length > 0, { message: 'No fields to update' });

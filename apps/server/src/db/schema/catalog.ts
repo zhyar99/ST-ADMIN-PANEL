@@ -14,6 +14,7 @@ import {
 
 import {
   publicationStatus,
+  streamSourceKind,
   streamSourceOwnerType,
   streamTestResult,
   subtitleLanguage,
@@ -205,6 +206,11 @@ export const streamSource = pgTable(
     /** 0 is the primary source; higher numbers are ordered fallbacks. */
     priority: integer('priority').notNull().default(0),
     url: text('url').notNull(),
+    /**
+     * Whether `url` is a media file or a third-party player page. Defaults to
+     * DIRECT so every row that predates the column keeps its meaning.
+     */
+    kind: streamSourceKind('kind').notNull().default('DIRECT'),
     lastTestedAt: timestamp('last_tested_at', { withTimezone: true }),
     lastTestResult: streamTestResult('last_test_result'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

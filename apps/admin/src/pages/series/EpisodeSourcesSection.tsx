@@ -29,7 +29,7 @@ export default function EpisodeSourcesSection({ episode }: { episode: EpisodeRef
 
     return {
       list: () => listEpisodeSources(ref),
-      add: (url) => addEpisodeSource(ref, { url }),
+      add: (input) => addEpisodeSource(ref, input),
       remove: (sourceId) => deleteEpisodeSource(ref, sourceId),
       reorder: (orderedIds) => reorderEpisodeSources(ref, orderedIds),
       test: (sourceId) => testEpisodeSource(ref, sourceId),
@@ -37,7 +37,13 @@ export default function EpisodeSourcesSection({ episode }: { episode: EpisodeRef
     };
   }, [seriesId, seasonId, episodeId]);
 
+  // Same two kinds as a film — an episode is just as likely to be linked
+  // through a third-party player page as hosted as a file.
   return (
-    <StreamSourceManager queryKey={['admin', 'episodes', episodeId, 'sources']} api={sourceApi} />
+    <StreamSourceManager
+      queryKey={['admin', 'episodes', episodeId, 'sources']}
+      api={sourceApi}
+      allowEmbed
+    />
   );
 }

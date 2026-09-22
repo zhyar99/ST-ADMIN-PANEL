@@ -739,6 +739,89 @@ describe('stream source management', () => {
     });
   });
 
+  /**
+   * The embed kind (an https URL that serves a player *page* rather than a
+   * media file). The URL shape is identical to a manifest's as far as
+   * validation is concerned, so what these pin is that the operator's choice
+   * survives the round trip — nothing here may start guessing from the path.
+   */
+  const EMBED_URL = 'https://play.example.test/e/movie/1204680?autostart=true';
+
+  it('defaults a source with no kind to DIRECT', async (ctx) => {
+    requireDb(ctx);
+
+    const movieId = await createMovie();
+    await addSource(movieId, STREAM_URL);
+
+    const { sources } = (await (
+      await api(`/api/v1/admin/movies/${movieId}/sources`)
+    ).json()) as { sources: { kind: string }[] };
+
+    expect(sources[0]!.kind).toBe('DIRECT');
+  });
+
+  it('stores an embed page and reports its kind without exposing the url', async (ctx) => {
+    requireDb(ctx);
+
+    const movieId = await createMovie();
+
+    const created = await api(`/api/v1/admin/movies/${movieId}/sources`, {
+      method: 'POST',
+      ...json({ url: EMBED_URL, kind: 'EMBED' }),
+    });
+
+    expect(created.status).toBe(201);
+
+    const { sources } = (await (
+      await api(`/api/v1/admin/movies/${movieId}/sources`)
+    ).json()) as { sources: Record<string, unknown>[] };
+
+    expect(sources[0]).toMatchObject({ kind: 'EMBED' });
+    // The kind is safe to publish; the URL it describes still is not.
+    expect(Object.keys(sources[0]!)).not.toContain('url');
+  });
+
+  it('rejects a kind outside the enum', async (ctx) => {
+    requireDb(ctx);
+
+    const movieId = await createMovie();
+
+    const response = await api(`/api/v1/admin/movies/${movieId}/sources`, {
+      method: 'POST',
+      ...json({ url: EMBED_URL, kind: 'IFRAME' }),
+    });
+
+    expect(response.status).toBe(400);
+  });
+
+  it('keeps the health result when only the kind changes', async (ctx) => {
+    requireDb(ctx);
+
+    const movieId = await createMovie();
+    const sourceId = await addSource(movieId, STREAM_URL);
+
+    await db
+      .update(streamSource)
+      .set({ lastTestResult: 'OK', lastTestedAt: new Date() })
+      .where(eq(streamSource.id, sourceId));
+
+    const response = await api(`/api/v1/admin/movies/${movieId}/sources/${sourceId}`, {
+      method: 'PATCH',
+      ...json({ kind: 'EMBED' }),
+    });
+
+    expect(response.status).toBe(200);
+
+    // Correcting a mislabelled source is not a reason to forget that the URL
+    // answered: the same URL was reachable a moment ago and still is.
+    const { source } = (await response.json()) as {
+      source: { kind: string; lastTestResult: string | null };
+    };
+
+    expect(source.kind).toBe('EMBED');
+    expect(source.lastTestResult).toBe('OK');
+  });
+
   it('deletes a source', async (ctx) => {
     requireDb(ctx);
 

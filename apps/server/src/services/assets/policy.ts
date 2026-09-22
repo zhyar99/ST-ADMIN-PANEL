@@ -87,6 +87,10 @@ export const ASSET_POLICY: Readonly<Record<MediaAssetKind, KindPolicy>> = {
       'text/vtt': 'vtt',
       'application/x-subrip': 'srt',
       'text/plain': 'srt',
+      // Some browsers and operating systems do not register an SRT MIME type
+      // and fall back to the generic binary type. The upload filter only
+      // accepts this value when the filename still has a subtitle extension.
+      'application/octet-stream': 'srt',
     },
   },
   AD_CREATIVE: {
@@ -122,7 +126,27 @@ export const ASSET_KIND_SLUGS: readonly string[] = [...KIND_BY_SLUG.keys()];
 export function extensionFor(kind: AssetKind, mimeType: string, originalName: string): string {
   const fallback = ASSET_POLICY[kind].extensionByMime[mimeType] ?? 'bin';
 
-  if (kind !== 'SUBTITLE' || mimeType !== 'text/plain') return fallback;
+  const ambiguousSubtitleMime =
+    mimeType === 'text/plain' || mimeType === 'application/octet-stream';
+  if (kind !== 'SUBTITLE' || !ambiguousSubtitleMime) return fallback;
 
   return originalName.toLowerCase().endsWith('.vtt') ? 'vtt' : 'srt';
+}
+
+/**
+ * Checks the client-supplied type while keeping the generic binary exception
+ * limited to files whose names identify them as subtitle tracks.
+ */
+export function isUploadTypeAllowed(
+  kind: AssetKind,
+  mimeType: string,
+  originalName: string,
+): boolean {
+  if (!(mimeType in ASSET_POLICY[kind].extensionByMime)) return false;
+
+  if (kind === 'SUBTITLE' && mimeType === 'application/octet-stream') {
+    return /\.(srt|vtt)$/i.test(originalName);
+  }
+
+  return true;
 }

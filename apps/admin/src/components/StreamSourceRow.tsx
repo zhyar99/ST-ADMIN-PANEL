@@ -178,6 +178,11 @@ function HealthHistoryPopover({ sourceId }: { sourceId: string }) {
 
 export interface StreamSourceRowProps {
   source: StreamSourceDto;
+  /**
+   * Display name for `source.kind`, supplied by the manager so both the picker
+   * and this badge read from one set of labels.
+   */
+  kindLabel: string;
   /** Position in the list. 0 is the primary source. */
   index: number;
   isLast: boolean;
@@ -191,6 +196,7 @@ export interface StreamSourceRowProps {
 
 export default function StreamSourceRow({
   source,
+  kindLabel,
   index,
   isLast,
   isTesting,
@@ -208,6 +214,22 @@ export default function StreamSourceRow({
         ) : (
           <span>Backup {index}</span>
         )}
+      </td>
+      <td className="px-4 py-3">
+        {/*
+          Worth a column of its own rather than a footnote: an embed and a
+          direct file behave completely differently in the player, and the URL
+          that would give it away is deliberately not shown here.
+        */}
+        <span
+          className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+            source.kind === 'EMBED'
+              ? 'bg-violet-500/15 text-violet-200'
+              : 'bg-slate-700/40 text-slate-300'
+          }`}
+        >
+          {kindLabel}
+        </span>
       </td>
       <td className="px-4 py-3">
         <TestResultBadge result={source.lastTestResult} />

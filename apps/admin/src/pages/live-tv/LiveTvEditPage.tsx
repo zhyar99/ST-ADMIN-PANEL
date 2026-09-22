@@ -192,7 +192,7 @@ export default function LiveTvEditPage() {
   const sourceApi = useMemo<StreamSourceApi>(
     () => ({
       list: () => listChannelSources(id!),
-      add: (url) => addChannelSource(id!, { url }),
+      add: (input) => addChannelSource(id!, input),
       remove: (sourceId) => deleteChannelSource(id!, sourceId),
       reorder: (orderedIds) => reorderChannelSources(id!, orderedIds),
       test: (sourceId) => testChannelSource(id!, sourceId),

@@ -1,4 +1,4 @@
-import type { PublicationStatus, SubtitleLanguage } from '../enums.js';
+import type { PublicationStatus, StreamSourceKind, SubtitleLanguage } from '../enums.js';
 import type { SupportedLocale } from '../schemas/i18n.js';
 
 /**
@@ -184,6 +184,18 @@ export interface AdPolicyDTO {
  */
 export interface PlaybackSessionResponse {
   sourceUrl: string;
+  /**
+   * How to play `sourceUrl`.
+   *
+   * `DIRECT` — a media URL (.mp4, HLS manifest) for a video element. `EMBED` —
+   * a third-party player page that has to be loaded in an iframe or a webview;
+   * handing it to a video element plays nothing.
+   *
+   * Always present, including for a live channel. A client that predates the
+   * field and ignores it behaves exactly as before, because every source that
+   * existed before embeds did is DIRECT.
+   */
+  sourceKind: StreamSourceKind;
   subtitleTracks?: SubtitleTrackDTO[];
   adPolicy?: AdPolicyDTO | null;
 }
