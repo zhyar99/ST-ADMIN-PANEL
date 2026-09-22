@@ -68,6 +68,7 @@ function jpeg(width: number, height: number): Promise<Buffer> {
 interface AssetBody {
   id: string;
   kind: string;
+  name: string;
   url: string;
   mimeType: string;
   sizeBytes: number;
@@ -78,11 +79,12 @@ interface AssetBody {
 
 async function upload(
   slug: string,
-  file: { data: Buffer | string; name: string; type: string },
+  file: { data: Buffer | string; name: string; type: string; displayName?: string },
   token: string = adminToken,
 ): Promise<Response> {
   const form = new FormData();
   form.append('file', new Blob([file.data], { type: file.type }), file.name);
+  if (file.displayName) form.append('name', file.displayName);
 
   return fetch(`${baseUrl}/api/v1/admin/assets/upload/${slug}`, {
     method: 'POST',
@@ -200,6 +202,7 @@ describe('POST /api/v1/admin/assets/upload/:kind', () => {
     const asset = await uploadPoster();
 
     expect(asset.kind).toBe('POSTER');
+    expect(asset.name).toBe('poster.jpg');
     expect(asset.mimeType).toBe('image/jpeg');
     expect(asset.width).toBe(600);
     expect(asset.height).toBe(900);
@@ -211,6 +214,37 @@ describe('POST /api/v1/admin/assets/upload/:kind', () => {
     const fileName = asset.url.slice(prefix.length);
     expect(fileName).toMatch(/^[0-9a-f-]{36}\.jpg$/);
     expect(await exists(storagePathFor('posters', fileName))).toBe(true);
+  });
+
+  it('stores and returns a human-readable name for a generic-MIME subtitle', async (ctx) => {
+    requireDb(ctx);
+
+    const response = await upload('subtitle', {
+      data: '1\n00:00:00,000 --> 00:00:01,000\nHello\n',
+      name: 'captions.srt',
+      type: 'application/octet-stream',
+      displayName: 'Example Movie – English',
+    });
+
+    expect(response.status).toBe(201);
+    const { asset } = (await response.json()) as { asset: AssetBody };
+    createdAssetIds.add(asset.id);
+
+    expect(asset).toMatchObject({
+      kind: 'SUBTITLE',
+      name: 'Example Movie – English',
+      mimeType: 'application/octet-stream',
+    });
+    expect(asset.url).toMatch(/\/subtitles\/[0-9a-f-]{36}\.srt$/);
+
+    const [row] = await db
+      .select({ fileName: mediaAsset.fileName, filePath: mediaAsset.filePath })
+      .from(mediaAsset)
+      .where(eq(mediaAsset.id, asset.id));
+    expect(row).toMatchObject({
+      fileName: 'Example Movie – English',
+    });
+    expect(row?.filePath).toMatch(/^subtitles\/[0-9a-f-]{36}\.srt$/);
   });
 
   it('never exposes the stored file path', async (ctx) => {

@@ -20,7 +20,7 @@ const LANGUAGE_LABELS: Record<SubtitleLanguage, string> = {
 type SourceMode = 'library' | 'external';
 
 function fileNameOf(asset: AssetDto): string {
-  return asset.url.slice(asset.url.lastIndexOf('/') + 1);
+  return asset.name;
 }
 
 export default function SubtitlesSection({ movieId }: { movieId: string }) {

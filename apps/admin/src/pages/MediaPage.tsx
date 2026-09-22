@@ -317,6 +317,9 @@ function AssetCard({
         >
           {badgeLabel(asset.kind)}
         </span>
+        <p className="truncate text-sm text-slate-200" title={asset.name}>
+          {asset.name}
+        </p>
         <p className="text-xs text-slate-400">
           {formatBytes(asset.sizeBytes)}
           {asset.width && asset.height ? ` · ${asset.width}×${asset.height}` : ''}
@@ -330,11 +333,13 @@ function AssetCard({
 function UploadDialog({ onClose, onUploaded }: { onClose: () => void; onUploaded: () => void }) {
   const [kind, setKind] = useState<MediaAssetKind>('POSTER');
   const [file, setFile] = useState<File | null>(null);
+  const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const upload = useMutation({
-    mutationFn: (input: { kind: MediaAssetKind; file: File }) => uploadAsset(input.kind, input.file),
+    mutationFn: (input: { kind: MediaAssetKind; file: File; name?: string }) =>
+      uploadAsset(input.kind, input.file, input.name),
     onSuccess: onUploaded,
     onError: (uploadError) => {
       setError(
@@ -347,6 +352,7 @@ function UploadDialog({ onClose, onUploaded }: { onClose: () => void; onUploaded
   // kind must not silently survive the switch.
   useEffect(() => {
     setFile(null);
+    setName('');
     if (fileInputRef.current) fileInputRef.current.value = '';
   }, [kind]);
 
@@ -377,7 +383,11 @@ function UploadDialog({ onClose, onUploaded }: { onClose: () => void; onUploaded
               setError('Choose a file to upload.');
               return;
             }
-            upload.mutate({ kind, file });
+            if (kind === 'SUBTITLE' && !name.trim()) {
+              setError('Enter a name for this subtitle.');
+              return;
+            }
+            upload.mutate({ kind, file, ...(kind === 'SUBTITLE' && { name: name.trim() }) });
           }}
         >
           <div>
@@ -408,10 +418,37 @@ function UploadDialog({ onClose, onUploaded }: { onClose: () => void; onUploaded
               type="file"
               required
               accept={ACCEPT_BY_KIND[kind]}
-              onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+              onChange={(event) => {
+                const selected = event.target.files?.[0] ?? null;
+                setFile(selected);
+                if (kind === 'SUBTITLE' && selected && !name.trim()) {
+                  setName(selected.name.replace(/\.[^.]+$/, ''));
+                }
+              }}
               className={`${fieldClass} file:mr-3 file:rounded file:border-0 file:bg-slate-800 file:px-2 file:py-1 file:text-slate-200`}
             />
           </div>
+
+          {kind === 'SUBTITLE' && (
+            <div>
+              <label htmlFor="upload-subtitle-name" className="block text-sm font-medium text-slate-300">
+                Subtitle name
+              </label>
+              <input
+                id="upload-subtitle-name"
+                type="text"
+                required
+                maxLength={120}
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="Movie title – English"
+                className={fieldClass}
+              />
+              <p className="mt-1 text-xs text-slate-500">
+                This name is shown in the media library and subtitle picker.
+              </p>
+            </div>
+          )}
 
           {error && (
             <p

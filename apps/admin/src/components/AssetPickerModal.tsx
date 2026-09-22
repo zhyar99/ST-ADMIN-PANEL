@@ -113,7 +113,7 @@ export default function AssetPickerModal({
               </span>
             )}
             <span className="block truncate px-2 py-1.5 text-xs text-slate-400 group-hover:text-slate-200">
-              {asset.url.slice(asset.url.lastIndexOf('/') + 1)}
+              {asset.name}
             </span>
           </button>
         ))}

@@ -60,9 +60,14 @@ export function listAssets(params: ListAssetsParams = {}): Promise<ListAssetsRes
   return apiFetch<ListAssetsResult>(`/admin/assets${suffix}`);
 }
 
-export async function uploadAsset(kind: MediaAssetKind, file: File): Promise<AssetDto> {
+export async function uploadAsset(
+  kind: MediaAssetKind,
+  file: File,
+  name?: string,
+): Promise<AssetDto> {
   const form = new FormData();
   form.append('file', file);
+  if (name?.trim()) form.append('name', name.trim());
 
   const { asset } = await apiFetch<{ asset: AssetDto }>(
     `/admin/assets/upload/${kindSlug(kind)}`,

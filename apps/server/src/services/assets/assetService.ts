@@ -21,6 +21,7 @@ export function toAssetDto(row: MediaAsset): AssetDto {
   return {
     id: row.id,
     kind: row.kind,
+    name: row.fileName,
     url: buildAssetUrl(row.filePath),
     mimeType: row.mimeType,
     sizeBytes: row.sizeBytes ?? 0,
@@ -32,8 +33,10 @@ export function toAssetDto(row: MediaAsset): AssetDto {
 
 export interface CreateAssetParams {
   kind: AssetKind;
-  /** Filename multer chose — already a uuid, never the client's name. */
-  fileName: string;
+  /** Filename multer chose for storage — already a uuid, never the client's name. */
+  storedFileName: string;
+  /** Human-readable name shown to administrators. */
+  name: string;
   mimeType: string;
   sizeBytes: number;
   dimensions?: ImageDimensions | null;
@@ -49,8 +52,8 @@ export async function createAsset(params: CreateAssetParams): Promise<AssetDto> 
     .values({
       kind: params.kind,
       // Storage-relative, POSIX separators — it goes straight into a URL.
-      filePath: `${ASSET_POLICY[params.kind].directory}/${params.fileName}`,
-      fileName: params.fileName,
+      filePath: `${ASSET_POLICY[params.kind].directory}/${params.storedFileName}`,
+      fileName: params.name,
       mimeType: params.mimeType,
       sizeBytes: params.sizeBytes,
       width: params.dimensions?.width ?? null,

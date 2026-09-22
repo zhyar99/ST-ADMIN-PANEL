@@ -27,6 +27,11 @@ export const uploadKindParam = z.object({
   kind: z.enum(ASSET_KIND_SLUGS as [string, ...string[]]),
 });
 
+/** Optional human-readable name supplied alongside the multipart file. */
+export const uploadAssetFields = z.object({
+  name: z.string().trim().min(1, 'Asset name cannot be empty').max(120).optional(),
+});
+
 export const assetIdParam = z.object({
   id: z.string().uuid('Not a valid asset id'),
 });
@@ -35,6 +40,7 @@ export const assetIdParam = z.object({
 export const assetDto = z.object({
   id: z.string().uuid(),
   kind: assetKindQuery,
+  name: z.string(),
   url: z.string(),
   mimeType: z.string(),
   sizeBytes: z.number().int(),

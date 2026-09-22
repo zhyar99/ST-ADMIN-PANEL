@@ -22,6 +22,8 @@ import type { LocalizedText, PartialLocalizedText } from './schemas/i18n.js';
 export interface AssetDto {
   id: string;
   kind: MediaAssetKind;
+  /** Human-readable upload name shown in the admin media library and pickers. */
+  name: string;
   url: string;
   mimeType: string;
   sizeBytes: number;

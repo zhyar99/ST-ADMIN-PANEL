@@ -81,8 +81,8 @@ export const ASSET_POLICY: Readonly<Record<MediaAssetKind, KindPolicy>> = {
     // Phase 13: tightened from 5 MB. A feature-length WebVTT or SRT track is a
     // few hundred kilobytes; anything near this ceiling is not a subtitle file.
     maxBytes: 2 * MB,
-    // Browsers send .srt as text/plain, so it has to be allowed; the stored
-    // extension for text/plain is taken from the original name (srt or vtt).
+    // Browsers report subtitle files with several generic types, so the stored
+    // extension for ambiguous types is taken from the original filename.
     extensionByMime: {
       'text/vtt': 'vtt',
       'application/x-subrip': 'srt',

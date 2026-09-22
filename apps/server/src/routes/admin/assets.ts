@@ -6,7 +6,7 @@ import { requireRole } from '../../middleware/rbac';
 import { HttpError } from '../../middleware/errorHandler';
 import { parseOrThrow } from '../../lib/validate';
 import { recordAudit } from '../../lib/audit';
-import { assetIdParam, listAssetsQuery } from '../../schemas/assetSchemas';
+import { assetIdParam, listAssetsQuery, uploadAssetFields } from '../../schemas/assetSchemas';
 import { createAsset, deleteAsset, getAssetById, listAssets } from '../../services/assets/assetService';
 import { discardUpload, validateImage } from '../../services/assets/imageValidator';
 import { resolveAssetKind, uploadAssetFile } from '../../services/assets/uploadMiddleware';
@@ -44,13 +44,22 @@ adminAssetsRouter.post(
       throw new HttpError(400, 'FILE_REQUIRED', 'No file was uploaded');
     }
 
+    let fields;
+    try {
+      fields = parseOrThrow(uploadAssetFields, req.body);
+    } catch (error) {
+      await discardUpload(file.path);
+      throw error;
+    }
+
     const dimensions = await validateImage(file.path, kind);
 
     let asset;
     try {
       asset = await createAsset({
         kind,
-        fileName: file.filename,
+        storedFileName: file.filename,
+        name: fields.name ?? file.originalname,
         mimeType: file.mimetype,
         sizeBytes: file.size,
         dimensions,
