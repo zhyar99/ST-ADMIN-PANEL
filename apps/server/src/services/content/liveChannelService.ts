@@ -1,7 +1,9 @@
-import { and, asc, count, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, sql } from 'drizzle-orm';
 
 import type {
   AssetDto,
+  BulkChannelPublicationResult,
+  MoveLiveChannelInput,
   LiveChannelCreateInput,
   LiveChannelDetailDto,
   LiveChannelListItemDto,
@@ -18,6 +20,7 @@ import {
   type MediaAsset,
 } from '../../db/schema';
 import { HttpError } from '../../middleware/errorHandler';
+import { publishContent, unpublishContent } from './publishService';
 import { toAssetDto } from '../assets/assetService';
 
 /**
@@ -90,7 +93,7 @@ export async function listLiveChannels(
       .select()
       .from(liveChannel)
       .where(where)
-      .orderBy(desc(liveChannel.createdAt), desc(liveChannel.id))
+      .orderBy(asc(liveChannel.sortOrder), desc(liveChannel.createdAt), desc(liveChannel.id))
       .limit(params.limit)
       .offset(offset),
     db.select({ value: count() }).from(liveChannel).where(where),
@@ -281,5 +284,53 @@ export async function deleteLiveChannel(id: string): Promise<void> {
       .where(and(eq(streamSource.ownerType, 'LIVE_CHANNEL'), eq(streamSource.ownerId, id)));
 
     await tx.delete(liveChannel).where(eq(liveChannel.id, id));
+  });
+}
+
+export async function bulkChannelPublication(
+  ids: string[], status: 'PUBLISHED' | 'UNPUBLISHED', adminUserId: string,
+): Promise<BulkChannelPublicationResult> {
+  const result: BulkChannelPublicationResult = { succeeded: [], failed: [] };
+  for (const id of ids) {
+    try {
+      await requireLiveChannel(id);
+      if (status === 'PUBLISHED') await publishContent('live_channel', id, adminUserId);
+      else await unpublishContent('live_channel', id, adminUserId);
+      result.succeeded.push(id);
+    } catch (error) {
+      result.failed.push({ id, message: error instanceof HttpError && error.status < 500
+        ? error.message : 'Could not change this channel. Please retry.' });
+    }
+  }
+  return result;
+}
+
+/** Move relative to the current order, including channels on other pages. */
+export async function moveLiveChannel(input: MoveLiveChannelInput): Promise<void> {
+  await db.transaction(async (tx) => {
+    // Serialize reorders with each other and with channel creation/deletion.
+    await tx.execute(sql`LOCK TABLE ${liveChannel} IN SHARE ROW EXCLUSIVE MODE`);
+    const rows = await tx.select({ id: liveChannel.id, sortOrder: liveChannel.sortOrder })
+      .from(liveChannel)
+      .orderBy(asc(liveChannel.sortOrder), desc(liveChannel.createdAt), desc(liveChannel.id));
+    const from = rows.findIndex((row) => row.id === input.id);
+    if (from < 0) throw new HttpError(404, 'NOT_FOUND', 'Live channel not found');
+    const [moved] = rows.splice(from, 1);
+    let to = input.placement === 'first' ? 0 : rows.length;
+    if (input.placement === 'before' || input.placement === 'after') {
+      to = rows.findIndex((row) => row.id === input.targetId);
+      if (to < 0) throw new HttpError(404, 'NOT_FOUND', 'Target channel not found');
+      if (input.placement === 'after') to += 1;
+    }
+    rows.splice(to, 0, moved!);
+    const changed = rows.map((row, position) => ({ ...row, position }))
+      .filter((row) => row.sortOrder !== row.position);
+    for (let offset = 0; offset < changed.length; offset += 500) {
+      const values = sql.join(changed.slice(offset, offset + 500)
+        .map((row) => sql`(${row.id}::uuid, ${row.position}::integer)`), sql`, `);
+      await tx.execute(sql`UPDATE ${liveChannel} AS c
+        SET sort_order = v.position, updated_at = now()
+        FROM (VALUES ${values}) AS v(id, position) WHERE c.id = v.id`);
+    }
   });
 }

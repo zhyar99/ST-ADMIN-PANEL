@@ -170,9 +170,9 @@ adminImportRouter.post(
   requireRole('ADMIN'),
   async (req: Request, res: Response) => {
     const { jobId } = parseOrThrow(jobIdParam, req.params);
-    const { mappedType, createNew } = parseOrThrow(bulkApproveBody, req.body ?? {});
+    const { mappedType, createNew, entryIds } = parseOrThrow(bulkApproveBody, req.body ?? {});
 
-    const result = await bulkApproveEntries(jobId, mappedType, createNew);
+    const result = await bulkApproveEntries(jobId, mappedType, createNew, entryIds);
 
     await recordAudit({
       adminUserId: callerId(req),

@@ -350,3 +350,15 @@ export interface ImportLinkTargetDto {
   /** Sources already attached, so the reviewer can see they are appending. */
   sourceCount: number;
 }
+
+/** Per-channel outcomes let bulk publication report and retry failed items. */
+export interface BulkChannelPublicationResult {
+  succeeded: string[];
+  failed: Array<{ id: string; message: string }>;
+}
+
+export interface MoveLiveChannelInput {
+  id: string;
+  placement: 'before' | 'after' | 'first' | 'last';
+  targetId?: string;
+}

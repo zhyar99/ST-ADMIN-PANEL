@@ -1,5 +1,7 @@
 import type {
   LiveChannelCreateInput,
+  BulkChannelPublicationResult,
+  MoveLiveChannelInput,
   LiveChannelDetailDto,
   LiveChannelListItemDto,
   LiveChannelUpdateInput,
@@ -145,4 +147,14 @@ export function testChannelSource(
     `/admin/live-channels/${channelId}/sources/${sourceId}/test`,
     { method: 'POST' },
   );
+}
+
+export function bulkChannelPublication(ids: string[], status: 'PUBLISHED' | 'UNPUBLISHED') {
+  return apiFetch<BulkChannelPublicationResult>('/admin/live-channels/bulk-publication', {
+    method: 'POST', body: { ids, status },
+  });
+}
+
+export function moveLiveChannel(input: MoveLiveChannelInput): Promise<void> {
+  return apiFetch<void>('/admin/live-channels/reorder', { method: 'POST', body: input });
 }

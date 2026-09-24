@@ -7,12 +7,16 @@ import { parseOrThrow } from '../../lib/validate';
 import { recordAudit } from '../../lib/audit';
 import {
   listLiveChannelsQuery,
+  bulkChannelPublicationBody,
+  moveLiveChannelBody,
   liveChannelCreateBody,
   liveChannelIdParam,
   liveChannelUpdateBody,
 } from '../../schemas/catalogSchemas';
 import {
   createLiveChannel,
+  bulkChannelPublication,
+  moveLiveChannel,
   deleteLiveChannel,
   getLiveChannelDetail,
   listChannelCategories,
@@ -62,6 +66,18 @@ adminLiveChannelsRouter.post('/', requireRole('ADMIN'), async (req: Request, res
   });
 
   res.status(201).json({ channel: created });
+});
+
+adminLiveChannelsRouter.post('/bulk-publication', requireRole('ADMIN'), async (req: Request, res: Response) => {
+  const { ids, status } = parseOrThrow(bulkChannelPublicationBody, req.body ?? {});
+  res.json(await bulkChannelPublication(ids, status, callerId(req)));
+});
+
+adminLiveChannelsRouter.post('/reorder', requireRole('ADMIN'), async (req: Request, res: Response) => {
+  const input = parseOrThrow(moveLiveChannelBody, req.body ?? {});
+  await moveLiveChannel(input);
+  await recordAudit({ adminUserId: callerId(req), action: 'LIVE_CHANNEL_REORDER', entityType: 'live_channel', entityId: input.id });
+  res.status(204).end();
 });
 
 adminLiveChannelsRouter.get('/:id', async (req: Request, res: Response) => {

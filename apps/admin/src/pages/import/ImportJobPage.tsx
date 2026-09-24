@@ -16,6 +16,7 @@ import {
   rejectEntry,
   type ImportTargetType,
 } from '../../lib/importApi';
+import SelectionCheckbox from '../../components/SelectionCheckbox';
 import Modal from '../../components/Modal';
 import StatusBadge from '../../components/StatusBadge';
 import { EntryStatusBadge, JobStatusBadge } from './ImportBadges';
@@ -69,6 +70,9 @@ export default function ImportJobPage() {
   const [rejecting, setRejecting] = useState<ImportEntryDto | null>(null);
   const [rejectNote, setRejectNote] = useState('');
   const [bulkType, setBulkType] = useState<ImportTargetType | null>(null);
+  const [bulkIds, setBulkIds] = useState<string[] | undefined>();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [notice, setNotice] = useState<string | null>(null);
 
   const cursor = cursorStack.at(-1);
 
@@ -90,6 +94,8 @@ export default function ImportJobPage() {
     void queryClient.invalidateQueries({ queryKey: ['admin', 'import', 'job', jobId] });
     void queryClient.invalidateQueries({ queryKey: ['admin', 'import', 'entries', jobId] });
     void queryClient.invalidateQueries({ queryKey: ['admin', 'import', 'jobs'] });
+    void queryClient.invalidateQueries({ queryKey: ['admin', 'live-channels'] });
+    void queryClient.invalidateQueries({ queryKey: ['admin', 'movies'] });
   }
 
   function reportFailure(fallback: string) {
@@ -102,7 +108,8 @@ export default function ImportJobPage() {
         mappedType: input.type,
         ...(input.targetId ? { targetId: input.targetId } : { createNew: true }),
       }),
-    onSuccess: () => {
+    onSuccess: (entry) => {
+      setSelected((current) => new Set([...current].filter((id) => id !== entry.id)));
       setLinking(null);
       refresh();
     },
@@ -112,7 +119,8 @@ export default function ImportJobPage() {
   const reject = useMutation({
     mutationFn: (input: { entryId: string; note?: string }) =>
       rejectEntry(jobId, input.entryId, input.note),
-    onSuccess: () => {
+    onSuccess: (entry) => {
+      setSelected((current) => new Set([...current].filter((id) => id !== entry.id)));
       setRejecting(null);
       setRejectNote('');
       refresh();
@@ -121,8 +129,10 @@ export default function ImportJobPage() {
   });
 
   const bulkApprove = useMutation({
-    mutationFn: (type: ImportTargetType) => bulkApproveEntries(jobId, type),
-    onSuccess: () => {
+    mutationFn: (type: ImportTargetType) => bulkApproveEntries(jobId, type, bulkIds),
+    onSuccess: (result) => {
+      setSelected(new Set());
+      setNotice(`${result.approved} entries approved. ${result.skipped} skipped.`);
       setBulkType(null);
       // Back to the first page: the rows that were on screen have all moved out
       // of the Staged tab.
@@ -140,11 +150,33 @@ export default function ImportJobPage() {
   const stagedCount = job?.entryCounts.STAGED ?? 0;
   const busy = approve.isPending || reject.isPending || bulkApprove.isPending;
 
+  const selectable = entries.filter((entry) => entry.status === 'STAGED');
+  const allOnPage = selectable.length > 0 && selectable.every((entry) => selected.has(entry.id));
+  function toggleEntry(id: string) {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else if (next.size < 1000) next.add(id);
+      return next;
+    });
+  }
+  function togglePage() {
+    setSelected((current) => {
+      const next = new Set(current);
+      for (const entry of selectable) {
+        if (allOnPage) next.delete(entry.id);
+        else if (next.size < 1000) next.add(entry.id);
+      }
+      return next;
+    });
+  }
+
   function typeFor(entryId: string): ImportTargetType {
     return typeByEntry[entryId] ?? 'LIVE_CHANNEL';
   }
 
   function selectStatus(next: StatusFilter) {
+    setSelected(new Set());
     setStatus(next);
     setCursorStack([]);
   }
@@ -199,7 +231,7 @@ export default function ImportJobPage() {
             <button
               type="button"
               disabled={busy}
-              onClick={() => setBulkType('LIVE_CHANNEL')}
+              onClick={() => { setBulkIds(undefined); setBulkType('LIVE_CHANNEL'); }}
               className={SMALL_BUTTON}
             >
               Approve all as live channels
@@ -207,7 +239,7 @@ export default function ImportJobPage() {
             <button
               type="button"
               disabled={busy}
-              onClick={() => setBulkType('MOVIE')}
+              onClick={() => { setBulkIds(undefined); setBulkType('MOVIE'); }}
               className={SMALL_BUTTON}
             >
               Approve all as movies
@@ -222,6 +254,20 @@ export default function ImportJobPage() {
         </p>
       )}
 
+      {notice && <p role="status" className="mb-4 text-sm text-emerald-300">{notice}</p>}
+      {canManage && selected.size > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-sky-500/30 bg-sky-500/10 p-3">
+          <span className="text-sm text-sky-100">{selected.size} selected across pages (up to 1,000)</span>
+          <button type="button" disabled={busy} className={SMALL_BUTTON}
+            onClick={() => { setBulkIds([...selected]); setBulkType('LIVE_CHANNEL'); }}>Accept selected as live channels</button>
+          <button type="button" disabled={busy} className={SMALL_BUTTON}
+            onClick={() => { setBulkIds([...selected]); setBulkType('MOVIE'); }}>Accept selected as movies</button>
+          <button type="button" disabled={busy} className={SMALL_BUTTON}
+            onClick={() => setSelected(new Set())}>Clear selection</button>
+        </div>
+      )}
+      {entriesQuery.isError && <p role="alert" className="mb-4 text-sm text-rose-300">Could not load entries.</p>}
+
       <div className="mb-4 border-b border-slate-800" role="tablist">
         <div className="flex gap-1">
           {STATUS_TABS.map((tab) => {
@@ -234,6 +280,7 @@ export default function ImportJobPage() {
                 type="button"
                 role="tab"
                 aria-selected={isActive}
+                disabled={busy}
                 onClick={() => selectStatus(tab.value)}
                 className={`-mb-px border-b-2 px-3 py-2 text-sm transition ${
                   isActive
@@ -253,6 +300,10 @@ export default function ImportJobPage() {
         <table className="w-full text-left text-sm">
           <thead className="bg-slate-900/60 text-xs uppercase tracking-wide text-slate-400">
             <tr>
+              {canManage && <th className="px-3 py-2.5"><SelectionCheckbox
+                aria-label="Select all staged entries on this page" checked={allOnPage}
+                indeterminate={!allOnPage && selectable.some((entry) => selected.has(entry.id))}
+                disabled={busy || entriesQuery.isFetching || selectable.length === 0} onChange={togglePage} /></th>}
               <th className="px-3 py-2.5 font-medium">Line</th>
               <th className="px-3 py-2.5 font-medium">Name</th>
               <th className="px-3 py-2.5 font-medium">Group</th>
@@ -269,7 +320,7 @@ export default function ImportJobPage() {
           <tbody className="divide-y divide-slate-800">
             {entriesQuery.isPending && (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-slate-400">
+                <td colSpan={canManage ? 8 : 6} className="px-4 py-6 text-center text-slate-400">
                   Loading entries…
                 </td>
               </tr>
@@ -277,7 +328,7 @@ export default function ImportJobPage() {
 
             {!entriesQuery.isPending && entries.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-slate-400">
+                <td colSpan={canManage ? 8 : 6} className="px-4 py-10 text-center text-slate-400">
                   Nothing here.
                 </td>
               </tr>
@@ -290,6 +341,10 @@ export default function ImportJobPage() {
 
               return (
                 <tr key={entry.id} className="align-top hover:bg-slate-900/40">
+                  {canManage && <td className="px-3 py-2.5"><SelectionCheckbox
+                    aria-label={`Select ${entry.rawName ?? `line ${entry.lineNumber}`}`}
+                    checked={selected.has(entry.id)} onChange={() => toggleEntry(entry.id)}
+                    disabled={!isStaged || busy || entriesQuery.isFetching || (!selected.has(entry.id) && selected.size >= 1000)} /></td>}
                   <td className="px-3 py-2.5 text-slate-500">{entry.lineNumber}</td>
                   <td className="px-3 py-2.5">
                     <span className="font-medium text-slate-100">
@@ -419,7 +474,7 @@ export default function ImportJobPage() {
       <div className="mt-4 flex items-center justify-end gap-2">
         <button
           type="button"
-          disabled={cursorStack.length === 0}
+          disabled={busy || entriesQuery.isFetching || cursorStack.length === 0}
           onClick={() => setCursorStack((stack) => stack.slice(0, -1))}
           className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-300 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
         >
@@ -427,7 +482,7 @@ export default function ImportJobPage() {
         </button>
         <button
           type="button"
-          disabled={!entriesQuery.data?.nextCursor}
+          disabled={busy || entriesQuery.isFetching || !entriesQuery.data?.nextCursor}
           onClick={() => {
             const next = entriesQuery.data?.nextCursor;
             if (next) setCursorStack((stack) => [...stack, next]);
@@ -495,14 +550,15 @@ export default function ImportJobPage() {
       <Modal
         open={bulkType !== null}
         title={
-          bulkType === 'MOVIE' ? 'Approve all staged as movies?' : 'Approve all staged as channels?'
+          `Accept ${bulkIds ? `${bulkIds.length} selected entries` : 'all staged entries'} as ${bulkType === 'MOVIE' ? 'movies' : 'live channels'}?`
         }
         description="Each staged entry becomes a draft with the playlist name and one stream source. Duplicates are skipped."
-        onClose={() => setBulkType(null)}
+        onClose={() => { if (!bulkApprove.isPending) setBulkType(null); }}
         footer={
           <>
             <button
               type="button"
+              disabled={bulkApprove.isPending}
               onClick={() => setBulkType(null)}
               className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-300 transition hover:bg-slate-800"
             >
@@ -517,7 +573,7 @@ export default function ImportJobPage() {
               {bulkApprove.isPending && (
                 <Loader2 size={14} aria-hidden className="animate-spin" />
               )}
-              Approve {stagedCount}
+              Accept {bulkIds?.length ?? stagedCount}
             </button>
           </>
         }

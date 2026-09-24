@@ -773,3 +773,40 @@ describe('GET /jobs and /entries', () => {
     expect(found?.sourceCount).toBeGreaterThanOrEqual(1);
   });
 });
+
+describe('selected playlist approvals', () => {
+  it('approves only selected entries and safely skips previously reviewed selections', async (ctx) => {
+    requireDb(ctx);
+    const job = await importPlaylist(playlist(['One', freshUrl('selected-one')], ['Two', freshUrl('selected-two')], ['Three', freshUrl('selected-three')]));
+    const entries = await entriesOf(job.id);
+    const entryIds = [entries[0]!.id, entries[2]!.id];
+    const approveSelected = () => api(`/api/v1/admin/import/jobs/${job.id}/bulk-approve`, {
+      method: 'POST', ...json({ mappedType: 'LIVE_CHANNEL', createNew: true, entryIds }),
+    });
+    // Overlapping requests must create exactly one draft for each selected entry.
+    const responses = await Promise.all([approveSelected(), approveSelected()]);
+    const results = await Promise.all(responses.map((response) => response.json())) as Array<{ approved: number; skipped: number }>;
+    expect(responses.every((response) => response.status === 200)).toBe(true);
+    expect(results.map((result) => result.approved).sort()).toEqual([0, 2]);
+    const after = await entriesOf(job.id);
+    expect(after.find((entry) => entry.id === entries[1]!.id)!.status).toBe('STAGED');
+    for (const entry of after.filter((entry) => entry.status === 'APPROVED')) trackStub('LIVE_CHANNEL', entry.mappedId);
+    const detail = await (await api(`/api/v1/admin/import/jobs/${job.id}`)).json() as { job: { approvedCount: number } };
+    expect(detail.job.approvedCount).toBe(2);
+  });
+
+  it('rejects an empty, duplicate or foreign selection without approving anything', async (ctx) => {
+    requireDb(ctx);
+    const job = await importPlaylist(playlist(['One', freshUrl('validation-one')]));
+    const other = await importPlaylist(playlist(['Other', freshUrl('validation-other')]));
+    const [entry] = await entriesOf(job.id);
+    const [foreign] = await entriesOf(other.id);
+    for (const entryIds of [[], [entry!.id, entry!.id], [entry!.id, foreign!.id]]) {
+      const response = await api(`/api/v1/admin/import/jobs/${job.id}/bulk-approve`, {
+        method: 'POST', ...json({ mappedType: 'MOVIE', createNew: true, entryIds }),
+      });
+      expect(response.status).toBe(400);
+    }
+    expect((await entriesOf(job.id))[0]!.status).toBe('STAGED');
+  });
+});

@@ -152,6 +152,8 @@ const ROUTE_ACCESS: Readonly<Record<string, Access>> = {
   'GET /api/v1/admin/live-channels': 'ANY_ROLE',
   'GET /api/v1/admin/live-channels/categories': 'ANY_ROLE',
   'POST /api/v1/admin/live-channels': 'ADMIN_ONLY',
+  'POST /api/v1/admin/live-channels/bulk-publication': 'ADMIN_ONLY',
+  'POST /api/v1/admin/live-channels/reorder': 'ADMIN_ONLY',
   'GET /api/v1/admin/live-channels/:id': 'ANY_ROLE',
   'PATCH /api/v1/admin/live-channels/:id': 'ADMIN_ONLY',
   'DELETE /api/v1/admin/live-channels/:id': 'ADMIN_ONLY',

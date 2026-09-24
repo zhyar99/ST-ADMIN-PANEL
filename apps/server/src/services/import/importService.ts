@@ -554,12 +554,13 @@ function stubName(entry: ImportEntry): { en: string; ckb: string; ar: string } {
 
 const EMPTY_COPY = { en: '', ckb: '', ar: '' };
 
-async function requireEntry(jobId: string, entryId: string): Promise<ImportEntry> {
-  const [row] = await db
+async function requireEntry(jobId: string, entryId: string, tx: Executor): Promise<ImportEntry> {
+  const [row] = await tx
     .select()
     .from(importEntry)
     .where(and(eq(importEntry.jobId, jobId), eq(importEntry.id, entryId)))
-    .limit(1);
+    .limit(1)
+    .for('update');
 
   if (!row) throw new HttpError(404, 'NOT_FOUND', 'Import entry not found');
 
@@ -602,16 +603,6 @@ export async function approveEntry(
   mappedType: ImportApprovableType,
   options: ApproveOptions,
 ): Promise<ImportEntryDto> {
-  const entry = await requireEntry(jobId, entryId);
-
-  if (entry.status !== 'STAGED') {
-    throw new HttpError(
-      409,
-      'ENTRY_NOT_STAGED',
-      `Only a staged entry can be approved; this one is ${entry.status}`,
-    );
-  }
-
   const createNew = options.createNew === true;
 
   // Exactly one of the two, so "create a stub" and "attach to that item" can
@@ -627,6 +618,16 @@ export async function approveEntry(
   if (options.targetId) await requireLinkTarget(mappedType, options.targetId);
 
   const updated = await db.transaction(async (tx) => {
+    const entry = await requireEntry(jobId, entryId, tx);
+
+    if (entry.status !== 'STAGED') {
+      throw new HttpError(
+        409,
+        'ENTRY_NOT_STAGED',
+        `Only a staged entry can be approved; this one is ${entry.status}`,
+      );
+    }
+
     const mappedId = options.targetId ?? randomUUID();
 
     if (createNew) {
@@ -673,28 +674,31 @@ export async function rejectEntry(
   entryId: string,
   note?: string,
 ): Promise<ImportEntryDto> {
-  const entry = await requireEntry(jobId, entryId);
+  const updated = await db.transaction(async (tx) => {
+    const entry = await requireEntry(jobId, entryId, tx);
 
-  if (entry.status === 'APPROVED' || entry.status === 'REJECTED') {
-    throw new HttpError(
-      409,
-      'ENTRY_ALREADY_REVIEWED',
-      `This entry is already ${entry.status.toLowerCase()}`,
-    );
-  }
+    if (entry.status === 'APPROVED' || entry.status === 'REJECTED') {
+      throw new HttpError(
+        409,
+        'ENTRY_ALREADY_REVIEWED',
+        `This entry is already ${entry.status.toLowerCase()}`,
+      );
+    }
 
-  const [updated] = await db
-    .update(importEntry)
-    // An empty note leaves whatever was already there — for a DUPLICATE that is
-    // the "repeated on line N" note, which is worth keeping.
-    .set({ status: 'REJECTED', adminNote: note?.trim() || entry.adminNote })
-    .where(eq(importEntry.id, entry.id))
-    .returning();
+    const [updated] = await tx
+      .update(importEntry)
+      // An empty note leaves whatever was already there — for a DUPLICATE that is
+      // the "repeated on line N" note, which is worth keeping.
+      .set({ status: 'REJECTED', adminNote: note?.trim() || entry.adminNote })
+      .where(eq(importEntry.id, entry.id))
+      .returning();
 
-  await db
-    .update(importJob)
-    .set({ rejectedCount: sql`${importJob.rejectedCount} + 1`, updatedAt: new Date() })
-    .where(eq(importJob.id, jobId));
+    await tx
+      .update(importJob)
+      .set({ rejectedCount: sql`${importJob.rejectedCount} + 1`, updatedAt: new Date() })
+      .where(eq(importJob.id, jobId));
+    return updated!;
+  });
 
   return toImportEntryDto({ entry: updated!, duplicateOwnerType: null, duplicateOwnerId: null }, true);
 }
@@ -717,6 +721,7 @@ export async function bulkApproveEntries(
   jobId: string,
   mappedType: ImportApprovableType,
   createNew: boolean,
+  entryIds?: string[],
 ): Promise<BulkApproveResult> {
   await requireImportJob(jobId);
 
@@ -728,20 +733,21 @@ export async function bulkApproveEntries(
     );
   }
 
-  const counts = await entryCountsFor(jobId);
-  const staged = await db
-    .select()
-    .from(importEntry)
-    .where(and(eq(importEntry.jobId, jobId), eq(importEntry.status, 'STAGED')))
-    .orderBy(asc(importEntry.lineNumber), asc(importEntry.id));
+  return db.transaction(async (tx) => {
+    // Lock the reviewed rows before deciding what to create. Concurrent bulk
+    // requests then see APPROVED entries and cannot create duplicate stubs.
+    const entries = await tx.select().from(importEntry)
+      .where(and(eq(importEntry.jobId, jobId), entryIds ? inArray(importEntry.id, entryIds) : undefined))
+      .orderBy(asc(importEntry.lineNumber), asc(importEntry.id))
+      .for('update');
+    if (entryIds && entries.length !== entryIds.length) {
+      throw new HttpError(400, 'INVALID_ENTRY_IDS', 'Some selected entries do not belong to this import job');
+    }
+    const staged = entries.filter((entry) => entry.status === 'STAGED');
+    const skipped = entries.length - staged.length;
+    if (staged.length === 0) return { approved: 0, skipped };
+    const assigned = staged.map((entry) => ({ entry, mappedId: randomUUID() }));
 
-  const skipped = counts.DUPLICATE + counts.APPROVED + counts.REJECTED;
-
-  if (staged.length === 0) return { approved: 0, skipped };
-
-  const assigned = staged.map((entry) => ({ entry, mappedId: randomUUID() }));
-
-  await db.transaction(async (tx) => {
     for (let offset = 0; offset < assigned.length; offset += INSERT_BATCH) {
       const batch = assigned.slice(offset, offset + INSERT_BATCH);
 
@@ -798,9 +804,8 @@ export async function bulkApproveEntries(
         updatedAt: new Date(),
       })
       .where(eq(importJob.id, jobId));
+    return { approved: assigned.length, skipped };
   });
-
-  return { approved: assigned.length, skipped };
 }
 
 /**

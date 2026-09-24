@@ -1,4 +1,4 @@
-import { and, count, desc, eq } from 'drizzle-orm';
+import { and, asc, count, desc, eq } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 
 import type {
@@ -53,7 +53,7 @@ export async function listPublishedLiveChannels(
       .from(liveChannel)
       .leftJoin(logo, eq(logo.id, liveChannel.logoAssetId))
       .where(where)
-      .orderBy(desc(liveChannel.createdAt), desc(liveChannel.id))
+      .orderBy(asc(liveChannel.sortOrder), desc(liveChannel.createdAt), desc(liveChannel.id))
       .limit(params.limit)
       .offset(offset),
     db.select({ value: count() }).from(liveChannel).where(where),

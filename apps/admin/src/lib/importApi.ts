@@ -106,11 +106,12 @@ export interface BulkApproveResult {
 export function bulkApproveEntries(
   jobId: string,
   mappedType: ImportTargetType,
+  entryIds?: string[],
 ): Promise<BulkApproveResult> {
   return apiFetch<BulkApproveResult>(`/admin/import/jobs/${jobId}/bulk-approve`, {
     method: 'POST',
     // Bulk approval only ever creates stubs — linking is a per-entry decision.
-    body: { mappedType, createNew: true },
+    body: { mappedType, createNew: true, ...(entryIds ? { entryIds } : {}) },
   });
 }
 

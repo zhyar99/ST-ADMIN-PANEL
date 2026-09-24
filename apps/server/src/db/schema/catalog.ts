@@ -174,12 +174,14 @@ export const liveChannel = pgTable(
     // refuses to delete an asset a channel still points at.
     logoAssetId: uuid('logo_asset_id').references(() => mediaAsset.id),
     category: text('category').notNull(),
+    sortOrder: integer('sort_order').notNull().default(2147483647),
     status: publicationStatus('status').notNull().default('DRAFT'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    // The admin list filters by status and orders by creation date.
+    index('live_channel_sort_order_idx').on(table.sortOrder),
+    // Creation date remains the tie-breaker for newly added channels.
     index('live_channel_status_created_at_idx').on(table.status, table.createdAt),
     // ...and filters by category independently of status.
     index('live_channel_category_idx').on(table.category),

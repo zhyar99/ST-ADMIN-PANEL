@@ -9,6 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { adminUser, auditLog, liveChannel, mediaAsset, streamSource } from '../../../db/schema';
 import { app } from '../../../app';
 import { db, pool } from '../../../db/client';
+import { listPublishedLiveChannels } from '../../../services/consumer/consumerLiveChannelService';
 
 /**
  * Integration coverage for the Phase 7 live channel routes.
@@ -627,5 +628,71 @@ describe('live channel stream sources', () => {
     expect(await db.select().from(streamSource).where(eq(streamSource.id, sourceId))).toHaveLength(
       0,
     );
+  });
+});
+
+describe('bulk channel management', () => {
+  it('publishes ready selections, reports failures, and leaves other channels alone', async (ctx) => {
+    requireDb(ctx);
+    const ready = await createChannel();
+    const incomplete = await createChannel();
+    const untouched = await createChannel();
+    await addSource(ready, STREAM_URL);
+    const missing = randomUUID();
+    const response = await api('/api/v1/admin/live-channels/bulk-publication', {
+      method: 'POST', ...json({ ids: [ready, incomplete, missing], status: 'PUBLISHED' }),
+    });
+    expect(response.status).toBe(200);
+    const body = await response.json() as { succeeded: string[]; failed: Array<{ id: string; message: string }> };
+    expect(body.succeeded).toEqual([ready]);
+    expect(body.failed.map((item) => item.id)).toEqual([incomplete, missing]);
+    expect(body.failed[0]!.message).toContain('stream source');
+    const rows = await db.select().from(liveChannel).where(inArray(liveChannel.id, [ready, incomplete, untouched]));
+    expect(rows.find((row) => row.id === ready)!.status).toBe('PUBLISHED');
+    expect(rows.filter((row) => row.id !== ready).every((row) => row.status === 'DRAFT')).toBe(true);
+    const unpublish = await api('/api/v1/admin/live-channels/bulk-publication', {
+      method: 'POST', ...json({ ids: [ready, incomplete], status: 'UNPUBLISHED' }),
+    });
+    expect(await unpublish.json()).toEqual({ succeeded: [ready, incomplete], failed: [] });
+    const audits = await db.select().from(auditLog).where(and(eq(auditLog.entityId, ready), eq(auditLog.adminUserId, adminId)));
+    expect(audits.map((row) => row.action)).toEqual(expect.arrayContaining(['PUBLISH', 'UNPUBLISH']));
+  });
+
+  it('persists relative and end moves across pages and in the consumer list', async (ctx) => {
+    requireDb(ctx);
+    const category = `Order-${randomUUID().slice(0, 8)}`;
+    const ids = await Promise.all([createChannel({ category }), createChannel({ category }), createChannel({ category })]);
+    await db.update(liveChannel).set({ status: 'PUBLISHED' }).where(inArray(liveChannel.id, ids));
+    for (const id of [...ids].reverse()) {
+      expect((await api('/api/v1/admin/live-channels/reorder', { method: 'POST', ...json({ id, placement: 'first' }) })).status).toBe(204);
+    }
+    const firstPage = await (await api(`/api/v1/admin/live-channels?category=${category}&limit=2`)).json() as { items: Array<{ id: string }> };
+    const secondPage = await (await api(`/api/v1/admin/live-channels?category=${category}&limit=2&page=2`)).json() as { items: Array<{ id: string }> };
+    expect([...firstPage.items, ...secondPage.items].map((row) => row.id)).toEqual(ids);
+    expect((await api('/api/v1/admin/live-channels/reorder', { method: 'POST', ...json({ id: ids[2], targetId: ids[0], placement: 'before' }) })).status).toBe(204);
+    const consumer = await listPublishedLiveChannels({ category, page: 1, limit: 100, lang: 'en' });
+    expect(consumer.data.map((row) => row.id)).toEqual([ids[2], ids[0], ids[1]]);
+    expect((await api('/api/v1/admin/live-channels/reorder', { method: 'POST', ...json({ id: ids[2], placement: 'last' }) })).status).toBe(204);
+    const after = await listPublishedLiveChannels({ category, page: 1, limit: 100, lang: 'en' });
+    expect(after.data.map((row) => row.id)).toEqual(ids);
+    expect((await api('/api/v1/admin/live-channels/reorder', { method: 'POST', ...json({ id: ids[0], targetId: ids[1], placement: 'after' }) })).status).toBe(204);
+    expect((await listPublishedLiveChannels({ category, page: 1, limit: 100, lang: 'en' })).data.map((row) => row.id)).toEqual([ids[1], ids[0], ids[2]]);
+    const added = await createChannel({ category });
+    const all = await (await api(`/api/v1/admin/live-channels?category=${category}`)).json() as { items: Array<{ id: string }> };
+    expect(all.items.at(-1)!.id).toBe(added);
+  });
+
+  it('rejects invalid selections and unauthorized mutations', async (ctx) => {
+    requireDb(ctx);
+    const id = await createChannel();
+    for (const ids of [[], [id, id], ['invalid']]) {
+      expect((await api('/api/v1/admin/live-channels/bulk-publication', { method: 'POST', ...json({ ids, status: 'PUBLISHED' }) })).status).toBe(400);
+    }
+    for (const input of [{ id, placement: 'before' }, { id, targetId: id, placement: 'before' }]) {
+      expect((await api('/api/v1/admin/live-channels/reorder', { method: 'POST', ...json(input) })).status).toBe(400);
+    }
+    expect((await api('/api/v1/admin/live-channels/reorder', { method: 'POST', ...json({ id, targetId: randomUUID(), placement: 'after' }) })).status).toBe(404);
+    expect((await api('/api/v1/admin/live-channels/reorder', { method: 'POST', ...json({ id, placement: 'first' }) }, viewerToken)).status).toBe(403);
+    expect((await api('/api/v1/admin/live-channels/bulk-publication', { method: 'POST', ...json({ ids: [id], status: 'PUBLISHED' }) }, viewerToken)).status).toBe(403);
   });
 });

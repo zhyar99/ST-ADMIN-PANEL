@@ -63,6 +63,7 @@ export const rejectEntryBody = z.object({
 export const bulkApproveBody = z.object({
   mappedType: approvableType,
   createNew: z.boolean(),
+  entryIds: z.array(uuid).min(1).max(1000).refine((ids) => new Set(ids).size === ids.length, "Entry ids must be unique").optional(),
 });
 
 export const linkTargetsQuery = z.object({

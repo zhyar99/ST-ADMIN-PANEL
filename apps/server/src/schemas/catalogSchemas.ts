@@ -298,3 +298,18 @@ export const episodeSourceScopeParam = episodeScopeParam.extend({
 export const episodeSubtitleScopeParam = episodeScopeParam.extend({
   subtitleId: z.string().uuid('Not a valid subtitle track id'),
 });
+
+export const bulkChannelPublicationBody = z.object({
+  ids: z.array(z.string().uuid()).min(1).max(1000)
+    .refine((ids) => new Set(ids).size === ids.length, 'Channel ids must be unique'),
+  status: z.enum(['PUBLISHED', 'UNPUBLISHED']),
+});
+
+export const moveLiveChannelBody = z.object({
+  id: z.string().uuid(),
+  placement: z.enum(['before', 'after', 'first', 'last']),
+  targetId: z.string().uuid().optional(),
+}).refine((input) => {
+  const relative = input.placement === 'before' || input.placement === 'after';
+  return relative ? !!input.targetId && input.targetId !== input.id : input.targetId === undefined;
+}, 'A relative move needs a different target channel');

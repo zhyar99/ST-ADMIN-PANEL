@@ -28,6 +28,7 @@ export type AuditAction =
   | 'EPISODE_DELETE'
   | 'LIVE_CHANNEL_CREATE'
   | 'LIVE_CHANNEL_UPDATE'
+  | 'LIVE_CHANNEL_REORDER'
   /** Cascades to the channel's stream sources, so worth recording separately. */
   | 'LIVE_CHANNEL_DELETE'
   | 'STREAM_SOURCE_CREATE'
