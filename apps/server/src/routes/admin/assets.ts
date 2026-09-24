@@ -9,6 +9,7 @@ import { recordAudit } from '../../lib/audit';
 import { assetIdParam, listAssetsQuery, uploadAssetFields } from '../../schemas/assetSchemas';
 import { createAsset, deleteAsset, getAssetById, listAssets } from '../../services/assets/assetService';
 import { discardUpload, validateImage } from '../../services/assets/imageValidator';
+import { validateSubtitle } from '../../services/assets/subtitleValidator';
 import { resolveAssetKind, uploadAssetFile } from '../../services/assets/uploadMiddleware';
 
 export const adminAssetsRouter: Router = Router();
@@ -53,6 +54,7 @@ adminAssetsRouter.post(
     }
 
     const dimensions = await validateImage(file.path, kind);
+    await validateSubtitle(file.path, kind);
 
     let asset;
     try {
