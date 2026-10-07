@@ -66,7 +66,7 @@ export function getSeries(seriesId: string): Promise<SeriesDetailDto> {
 export function createSeries(input: SeriesCreateInput): Promise<SeriesDetailDto> {
   return apiFetch<{ series: SeriesDetailDto }>('/admin/series', {
     method: 'POST',
-    body: JSON.stringify(input),
+    body: input,
   }).then((body) => body.series);
 }
 
@@ -76,7 +76,7 @@ export function updateSeries(
 ): Promise<SeriesDetailDto> {
   return apiFetch<{ series: SeriesDetailDto }>(`/admin/series/${seriesId}`, {
     method: 'PATCH',
-    body: JSON.stringify(input),
+    body: input,
   }).then((body) => body.series);
 }
 
@@ -95,7 +95,7 @@ export function listSeasons(seriesId: string): Promise<SeasonDto[]> {
 export function createSeason(seriesId: string, number: number): Promise<SeasonDto> {
   return apiFetch<{ season: SeasonDto }>(`/admin/series/${seriesId}/seasons`, {
     method: 'POST',
-    body: JSON.stringify({ number }),
+    body: { number },
   }).then((body) => body.season);
 }
 
@@ -136,7 +136,7 @@ export function createEpisode(
 ): Promise<EpisodeDetailDto> {
   return apiFetch<{ episode: EpisodeDetailDto }>(
     `/admin/series/${seriesId}/seasons/${seasonId}/episodes`,
-    { method: 'POST', body: JSON.stringify(input) },
+    { method: 'POST', body: input },
   ).then((body) => body.episode);
 }
 
@@ -148,7 +148,7 @@ export function updateEpisode(
 ): Promise<EpisodeDetailDto> {
   return apiFetch<{ episode: EpisodeDetailDto }>(episodePath(seriesId, seasonId, episodeId), {
     method: 'PATCH',
-    body: JSON.stringify(input),
+    body: input,
   }).then((body) => body.episode);
 }
 
@@ -184,7 +184,7 @@ export function addEpisodeSource(
 ): Promise<StreamSourceDto> {
   return apiFetch<{ source: StreamSourceDto }>(sourcesPath(ref), {
     method: 'POST',
-    body: JSON.stringify(input),
+    body: input,
   }).then((body) => body.source);
 }
 
@@ -195,7 +195,7 @@ export function updateEpisodeSource(
 ): Promise<StreamSourceDto> {
   return apiFetch<{ source: StreamSourceDto }>(`${sourcesPath(ref)}/${sourceId}`, {
     method: 'PATCH',
-    body: JSON.stringify(input),
+    body: input,
   }).then((body) => body.source);
 }
 
@@ -209,7 +209,7 @@ export function reorderEpisodeSources(
 ): Promise<StreamSourceDto[]> {
   return apiFetch<{ sources: StreamSourceDto[] }>(`${sourcesPath(ref)}/reorder`, {
     method: 'POST',
-    body: JSON.stringify({ orderedIds }),
+    body: { orderedIds },
   }).then((body) => body.sources);
 }
 
@@ -243,7 +243,7 @@ export function addEpisodeSubtitle(
 ): Promise<SubtitleTrackDto> {
   return apiFetch<{ subtitle: SubtitleTrackDto }>(subtitlesPath(ref), {
     method: 'POST',
-    body: JSON.stringify(input),
+    body: input,
   }).then((body) => body.subtitle);
 }
 
